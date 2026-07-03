@@ -1,58 +1,103 @@
+import json
+import random
+import sys
+
 from car import F1Car, SafetyCar
-from tires import SoftTire, HardTire
+from tires import SoftTire, HardTire, IntermediateTire, WetTire
 from telemetry import TelemetryLogger
 from personnel import Mechanic, ChiefEngineer
 from engine import HondaEngine, MercedesEngine
 
+TIRE_MAP = {
+    "Soft": SoftTire,
+    "Hard": HardTire,
+    "Intermediate": IntermediateTire,
+    "Wet": WetTire,
+}
+
+ENGINE_MAP = {
+    "Honda": HondaEngine,
+    "Mercedes": MercedesEngine,
+}
+
+CAUTION_CHANCE = 0.20  # chance a given stint gets interrupted by a VSC/SC
+
+
+def load_strategies(path: str = "strategies.json") -> dict:
+    with open(path) as f:
+        return json.load(f)
+
+
+def build_car(driver_cfg: dict) -> F1Car:
+    first_tire = TIRE_MAP[driver_cfg["stints"][0]["tire"]]()
+    engine = ENGINE_MAP[driver_cfg["engine"]]()
+    return F1Car(driver_cfg["name"], first_tire, engine)
+
+
+def run_driver_strategy(car: F1Car, driver_cfg: dict, mechanic: Mechanic,
+                         engineer: ChiefEngineer, logger: TelemetryLogger,
+                         rng: random.Random) -> None:
+    stints = driver_cfg["stints"]
+    print(f"\n--- {car.name} ({driver_cfg['strategy_label']} strategy) ---")
+
+    for i, stint in enumerate(stints):
+        laps = stint["laps"]
+        caution = rng.random() < CAUTION_CHANCE
+        if caution:
+            print(f"WARNING: Caution flag deployed during {car.name}'s stint {i + 1}!")
+
+        logger.log_data(car.drive_stint(laps, caution=caution))
+
+        # Pit for every stint except the last
+        if i < len(stints) - 1:
+            next_tire = TIRE_MAP[stints[i + 1]["tire"]]()
+            print(mechanic.change_tires(car))
+            print(engineer.give_radio_comms(
+                f"Box, box. Fitting {stints[i + 1]['tire']} tires."))
+            car.tire = next_tire
+
+
 def main():
-    # 1. Initialize our Telemetry Logger (SRP)
+    seed = int(sys.argv[1]) if len(sys.argv) > 1 else None
+    rng = random.Random(seed)
+
+    config = load_strategies()
+
     logger = TelemetryLogger()
-    
-    # 2. Setup Team Personnel (ISP)
     mechanic = Mechanic()
     engineer = ChiefEngineer("GP")
-    
-    # 3. Setup Power Units (DIP)
-    honda_pu = HondaEngine()
-    merc_pu = MercedesEngine()
-    
-    # 4. Build the Grid 
-    # Injecting the tires (OCP) and engines (DIP) into the cars
-    car1 = F1Car("Verstappen", SoftTire(), honda_pu)
-    car2 = F1Car("Hamilton", HardTire(), merc_pu)
-    safety_car = SafetyCar("Mayländer")
-    
-    # --- RACE START ---
-    print("\n🚥 --- LIGHTS OUT AND AWAY WE GO --- 🚥\n")
-    
-    # Stint 1
-    print(engineer.give_radio_comms("Push push, let's open a gap."))
-    logger.log_data(car1.drive_stint(10))
-    logger.log_data(car2.drive_stint(10))
-    
-    # --- PIT WINDOW ---
-    print("\n🔧 --- PIT WINDOW OPEN --- 🔧")
-    print(engineer.give_radio_comms("Box, box. We are fitting hards."))
-    
-    # Mechanic performs the stop
-    print(mechanic.change_tires(car1))
-    
-    # Swap out the tires
-    car1.tire = HardTire() 
-    
-    # Stint 2
-    print(engineer.give_radio_comms("Good stop. Manage these tires to the end."))
-    logger.log_data(car1.drive_stint(20))
-    
+    safety_car = SafetyCar("Maylander")
+
+    print("\n--- LIGHTS OUT AND AWAY WE GO ---")
+
+    cars = []
+    for driver_cfg in config["drivers"]:
+        car = build_car(driver_cfg)
+        run_driver_strategy(car, driver_cfg, mechanic, engineer, logger, rng)
+        cars.append((car, driver_cfg["strategy_label"]))
+
     # --- TRACK STATUS SUMMARY ---
-    print("\n🏁 --- FINAL TRACK STATUS --- 🏁")
-    
-    # Loop through our Vehicle base classes (LSP)
-    # The program treats F1Cars and the SafetyCar exactly the same way here!
-    track_vehicles = [car1, car2, safety_car]
-    
+    print("\n--- FINAL TRACK STATUS ---")
+
+    # Loop through our Vehicle base classes (LSP).
+    # The program treats F1Cars and the SafetyCar exactly the same way here.
+    track_vehicles = [car for car, _ in cars] + [safety_car]
     for vehicle in track_vehicles:
         print(vehicle.get_status())
+
+    # --- STRATEGY COMPARISON ---
+    print("\n--- STRATEGY COMPARISON ---")
+    ranked = sorted(cars, key=lambda pair: pair[0].total_race_time)
+    winner, winner_strategy = ranked[0]
+    for car, strategy in ranked:
+        gap = car.total_race_time - winner.total_race_time
+        gap_str = "leader" if gap == 0 else f"+{gap:.1f}s"
+        print(f"{car.name:12s} | {strategy:6s} | "
+              f"{car.total_race_time:8.1f}s total | {gap_str}")
+
+    print(f"\n{winner.name}'s {winner_strategy} strategy wins this run "
+          f"(re-run with a different seed to see it play out differently).")
+
 
 if __name__ == "__main__":
     main()

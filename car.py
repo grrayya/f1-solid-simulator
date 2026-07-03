@@ -2,6 +2,9 @@ from abc import ABC, abstractmethod
 from tires import TireCompound
 from engine import IEngine  # Import the abstraction
 
+BASE_LAP_TIME = 90.0  # seconds, a rough dry-race baseline lap
+
+
 class Vehicle(ABC):
     def __init__(self, name: str):
         self.name = name
@@ -16,17 +19,41 @@ class F1Car(Vehicle):
     def __init__(self, driver_name: str, tire: TireCompound, engine: IEngine):
         super().__init__(driver_name)
         self.tire = tire
-        self.engine = engine 
+        self.engine = engine
         self.total_wear = 0.0
+        self.total_race_time = 0.0
 
-    def drive_stint(self, laps: int) -> str:
-        wear = self.tire.calculate_wear(laps)
+    def drive_stint(self, laps: int, caution: bool = False) -> str:
+        """Drive a stint, accumulating wear and lap time.
+
+        If `caution` is True (e.g. a Virtual Safety Car), tire wear and
+        lap-time penalties are both reduced, since the field is running
+        at a controlled, slower pace.
+        """
+        wear_multiplier = 0.4 if caution else 1.0
+        wear = self.tire.calculate_wear(laps) * wear_multiplier
         self.total_wear += wear
-        # The car uses the engine without needing to know what brand it is
-        return f"{self.name} drove {laps} laps using {self.engine.get_power_output()}. Total wear: {self.total_wear}%"
+
+        penalty_per_lap = self.tire.lap_time_penalty(self.total_wear)
+        lap_time = BASE_LAP_TIME + penalty_per_lap
+        if caution:
+            lap_time *= 1.3  # cars must slow down under caution
+        stint_time = lap_time * laps
+        self.total_race_time += stint_time
+
+        flag = " [under caution]" if caution else ""
+        return (
+            f"{self.name} drove {laps} laps on {self.tire.name} tires using "
+            f"{self.engine.get_power_output()}{flag}. "
+            f"Stint time: {stint_time:.1f}s | Total wear: {self.total_wear:.1f}% | "
+            f"Total race time: {self.total_race_time:.1f}s"
+        )
 
     def get_status(self) -> str:
-        return f"Race Car ({self.name}) | Tire Wear: {self.total_wear}%"
+        return (
+            f"Race Car ({self.name}) | Tire Wear: {self.total_wear:.1f}% | "
+            f"Total Time: {self.total_race_time:.1f}s"
+        )
 
 
 class SafetyCar(Vehicle):

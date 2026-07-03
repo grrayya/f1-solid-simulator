@@ -1,27 +1,27 @@
-from car import F1Car
+from car import F1Car, SafetyCar
 from tires import SoftTire, HardTire
 from telemetry import TelemetryLogger
 
 def main():
-    # Initialize our logger
     logger = TelemetryLogger()
     
-    # 1. Start on softs for a quick stint
+    # Setup our track session objects
     quali_tire = SoftTire()
-    my_car = F1Car("Verstappen", quali_tire)
+    car1 = F1Car("Verstappen", quali_tire)
+    car2 = F1Car("Leclerc", HardTire())
+    safety_car = SafetyCar("Mayländer")
     
-    # Drive a stint and log the data
-    stint_data = my_car.drive_stint(5)
+    # Run a quick simulation action
+    stint_data = car1.drive_stint(5)
     logger.log_data(stint_data)
     
-    # 2. Pit stop for hards
-    print("\n--- BOX BOX. Fitting Hard Tires. ---\n")
-    race_tire = HardTire()
-    my_car.tire = race_tire 
+    print("\n--- Track Status Update ---")
+    # LSP IN ACTION: We treat F1Cars and SafetyCars exactly the same way 
+    # via the Vehicle base class interface. The program never crashes.
+    track_vehicles = [car1, car2, safety_car]
     
-    # Drive the second stint and log the data
-    stint2_data = my_car.drive_stint(20)
-    logger.log_data(stint2_data)
+    for vehicle in track_vehicles:
+        print(vehicle.get_status())
 
 if __name__ == "__main__":
     main()

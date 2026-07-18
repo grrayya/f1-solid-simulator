@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from tires import TireCompound
-from engine import IEngine  # Import the abstraction
+from engine import IEngine
 
-BASE_LAP_TIME = 90.0  # seconds, a rough dry-race baseline lap
+BASE_LAP_TIME = 90.0  # seconds, rough dry-race baseline lap
 
 
 class Vehicle(ABC):
@@ -15,7 +15,6 @@ class Vehicle(ABC):
 
 
 class F1Car(Vehicle):
-    # Notice we ask for an IEngine here! This is Dependency Injection.
     def __init__(self, driver_name: str, tire: TireCompound, engine: IEngine):
         super().__init__(driver_name)
         self.tire = tire
@@ -26,9 +25,8 @@ class F1Car(Vehicle):
     def drive_stint(self, laps: int, caution: bool = False) -> str:
         """Drive a stint, accumulating wear and lap time.
 
-        If `caution` is True (e.g. a Virtual Safety Car), tire wear and
-        lap-time penalties are both reduced, since the field is running
-        at a controlled, slower pace.
+        Under caution (VSC/SC) the field runs at a controlled pace, so both
+        wear and the lap-time penalty get dialed back rather than zeroed out.
         """
         wear_multiplier = 0.4 if caution else 1.0
         wear = self.tire.calculate_wear(laps) * wear_multiplier
@@ -37,7 +35,7 @@ class F1Car(Vehicle):
         penalty_per_lap = self.tire.lap_time_penalty(self.total_wear)
         lap_time = BASE_LAP_TIME + penalty_per_lap
         if caution:
-            lap_time *= 1.3  # cars must slow down under caution
+            lap_time *= 1.3
         stint_time = lap_time * laps
         self.total_race_time += stint_time
 

@@ -24,8 +24,12 @@ CAUTION_CHANCE = 0.20  # chance a given stint gets interrupted by a VSC/SC
 
 
 def load_strategies(path: str = "strategies.json") -> dict:
-    with open(path) as f:
-        return json.load(f)
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print(f"Can't find {path} - pass a different strategies file as an argument?")
+        sys.exit(1)
 
 
 def build_car(driver_cfg: dict) -> F1Car:
@@ -48,7 +52,6 @@ def run_driver_strategy(car: F1Car, driver_cfg: dict, mechanic: Mechanic,
 
         logger.log_data(car.drive_stint(laps, caution=caution))
 
-        # Pit for every stint except the last
         if i < len(stints) - 1:
             next_tire = TIRE_MAP[stints[i + 1]["tire"]]()
             print(mechanic.change_tires(car))
@@ -62,7 +65,6 @@ def main():
     rng = random.Random(seed)
 
     config = load_strategies()
-
     logger = TelemetryLogger()
     mechanic = Mechanic()
     engineer = ChiefEngineer("GP")
@@ -76,16 +78,10 @@ def main():
         run_driver_strategy(car, driver_cfg, mechanic, engineer, logger, rng)
         cars.append((car, driver_cfg["strategy_label"]))
 
-    # --- TRACK STATUS SUMMARY ---
     print("\n--- FINAL TRACK STATUS ---")
-
-    # Loop through our Vehicle base classes (LSP).
-    # The program treats F1Cars and the SafetyCar exactly the same way here.
-    track_vehicles = [car for car, _ in cars] + [safety_car]
-    for vehicle in track_vehicles:
+    for vehicle in [car for car, _ in cars] + [safety_car]:
         print(vehicle.get_status())
 
-    # --- STRATEGY COMPARISON ---
     print("\n--- STRATEGY COMPARISON ---")
     ranked = sorted(cars, key=lambda pair: pair[0].total_race_time)
     winner, winner_strategy = ranked[0]
